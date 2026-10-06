@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
+    <title>Live Session</title>
+    <style>
+      /* Inter, self-hosted (SIL OFL) so it also works offline as a PWA */
+      @font-face {
+        font-family: "Inter";
+        src: url("fonts/inter-latin.woff2") format("woff2");
+        font-weight: 100 900;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      /* ---- Theme ---- */
+      :root {
+        --accent: #2a4a56;        /* deep teal, primary actions */
+        --accent-hover: #35596a;
+        --accent-soft: #e6edef;
+        --ink: #1b2536;           /* headline navy */
+        --ink-soft: #5a6878;
+        --ink-mute: #8593a0;
+        --line: #e2e8eb;
+        --live: #3fa564;          /* growth green */
+        --offline: #8593a0;       /* muted blue-grey, no red */
+        --warn: #8a5a00;          /* validation text, readable and not red */
+        --chrome-bg: #ffffff;
+        --page-area-bg: #f1f4f5;
+        --mint: #e1eee5;
+        --page-bg: #ffffff;
+        --tint: #e6edef;
+        --para-gap: 9px;          /* space between paragraphs (change this one number to adjust) */
+        --sans: "Inter", "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+      }
+      * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+      button, input { font-family: inherit; }
+      html, body { height: 100%; }
+      body {
+        margin: 0; color: var(--ink);
+        background:
+          radial-gradient(120% 45% at 0% 0%, var(--mint) 0%, rgba(225,238,229,0) 60%),
+          var(--page-area-bg);
+        background-attachment: fixed;
+        font: 14px/1.5 var(--sans);
+        display: flex; flex-direction: column;
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+
+      /* ---- top chrome ---- */
+      .chrome {
+        background: var(--chrome-bg); border-bottom: 1px solid var(--line);
+        position: sticky; top: 0; z-index: 20;
+        max-height: var(--chrome-h, 200px); overflow: hidden;
+        transition: max-height .2s ease-out, border-bottom-width .2s ease-out;
+      }
+      .chrome.hidden { max-height: 0; border-bottom-width: 0; }
+      .chrome-tab {
+        position: fixed; top: env(safe-area-inset-top); left: 50%; transform: translateX(-50%);
+        z-index: 21; width: 36px; height: 16px; border: 1px solid var(--line); border-top: 0;
+        border-radius: 0 0 10px 10px; background: var(--chrome-bg); color: var(--ink-soft);
+        display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0;
+        box-shadow: 0 2px 5px rgba(27,37,54,.10);
+      }
+      .chrome-tab svg { display: block; transition: transform .2s ease-out; }
+      .chrome.hidden ~ .chrome-tab svg { transform: rotate(180deg); }
+      .titlebar { display: flex; align-items: center; gap: 10px; padding: 11px 14px 4px; }
+      .titles { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+      .doc-title {
+        font-size: 14px; font-weight: 800; letter-spacing: .07em; color: var(--ink);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .doc-status {
+        font-size: 11px; color: var(--ink-soft);
+        display: flex; align-items: center; gap: 6px;
+      }
+      .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--offline); flex-shrink: 0; }
+      .dot.live { background: var(--live); animation: beat 1.9s ease-in-out infinite; }
+      @keyframes beat { 0%,100% { box-shadow: 0 0 0 0 rgba(63,165,100,.4); } 50% { box-shadow: 0 0 0 5px rgba(63,165,100,0); } }
+      @media (prefers-reduced-motion: reduce) { .dot.live { animation: none; } }
+
+      .toolbar {
+        display: flex; align-items: center; gap: 8px;
+        padding: 6px 14px 10px; font-size: 12px; color: var(--ink-soft);
+      }
+      .toolbar .peers { font-size: 11.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
+      .toolbar .spacer { flex: 1; }
+      .icon-btn {
+        border: 1px solid var(--line); background: #fff; color: var(--ink-soft);
+        border-radius: 6px; padding: 6px 12px; font-size: 12.5px; cursor: pointer;
+        display: flex; align-items: center; gap: 6px;
+      }
+      .icon-btn:active { background: var(--accent-soft); }
+      .icon-btn.icon-only { padding: 6px 8px; }
+      .icon-btn svg { display: block; }
+
+      /* ---- settings panel ---- */
+      .modal-backdrop {
+        display: none; position: fixed; inset: 0; background: rgba(27, 37, 54, .5);
+        z-index: 100; align-items: center; justify-content: center; padding: 20px;
+      }
+      .modal-backdrop.open { display: flex; }
+      .modal {
+        background: #fff; border-radius: 12px; width: 100%; max-width: 380px;
+        padding: 22px 22px 18px; box-shadow: 0 4px 20px rgba(27,37,54,.25);
+        max-height: 88vh; overflow-y: auto;
+      }
+      .modal h2 { margin: 0 0 14px; font-size: 17px; font-weight: 500; color: var(--ink); }
+      .settings-section { margin-bottom: 18px; }
+      .settings-section:last-of-type { margin-bottom: 4px; }
+      .settings-section label {
+        display: flex; align-items: center; justify-content: space-between;
+        font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+        color: var(--ink-soft); margin-bottom: 8px;
+      }
+      .settings-val { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }
+      .settings-section input[type="text"] {
+        width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 8px;
+        font: 600 16px var(--sans); text-align: center;
+        letter-spacing: .2em; text-transform: uppercase; color: var(--ink);
+      }
+      .settings-section input[type="text"]:focus,
+      .stepper:focus-within {
+        outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(42,74,86,.22);
+      }
+      .settings-section input[type="range"] {
+        width: 100%; accent-color: var(--accent); height: 22px; cursor: pointer;
+      }
+      .stepper {
+        display: flex; align-items: stretch; border: 1px solid var(--line); border-radius: 8px;
+        overflow: hidden;
+      }
+      .stepper-btn {
+        border: 0; background: var(--page-area-bg); color: var(--ink); font-size: 17px;
+        width: 42px; cursor: pointer; line-height: 1;
+      }
+      .stepper-btn:active { background: var(--accent-soft); }
+      .stepper input[type="number"] {
+        flex: 1; border: 0; text-align: center; font: 600 15px var(--sans); font-variant-numeric: tabular-nums;
+        color: var(--ink); -moz-appearance: textfield;
+      }
+      .stepper input[type="number"]:focus { outline: none; }
+      .stepper input::-webkit-outer-spin-button,
+      .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+      .err { color: var(--warn); font-size: 12px; min-height: 16px; margin-top: 6px; }
+      .btn-text {
+        border: 0; background: none; color: var(--accent); font-weight: 500;
+        font-size: 13.5px; padding: 9px 14px; border-radius: 6px; cursor: pointer;
+      }
+      .btn-text:hover { background: var(--accent-soft); }
+      .btn-solid {
+        border: 0; background: var(--accent); color: #fff; font-weight: 500;
+        font-size: 13.5px; padding: 9px 18px; border-radius: 6px; cursor: pointer;
+      }
+      .btn-solid:hover { background: var(--accent-hover); }
+
+      /* ---- the "page" area ---- */
+      #pageArea { flex: 1; overflow-y: auto; padding: 24px 14px 76px; -webkit-overflow-scrolling: touch; }
+      .empty { color: var(--ink-soft); text-align: center; margin-top: 16vh; font-size: 13.5px; padding: 0 24px; }
+      .empty b { display: block; color: var(--ink); font-size: 16px; font-weight: 500; margin-bottom: 8px; }
+
+      .page {
+        background: var(--page-bg); max-width: var(--page-width, 720px); margin: 0 auto 22px;
+        border-radius: 4px; border-left: 3px solid var(--accent);
+        box-shadow: 0 1px 3px 1px rgba(27,37,54,.10), 0 1px 2px rgba(27,37,54,.18);
+        padding: 22px 26px 20px; animation: rise .2s ease-out;
+        transition: max-width .15s ease-out;
+      }
+      @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+      @media (prefers-reduced-motion: reduce) { .page { animation: none; } }
+
+      .source-chip { display: none !important; }
+      .page-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+      .page-time { font-size: 11.5px; color: var(--ink-soft); }
+      .page-copy {
+        margin-left: auto; border: 1px solid var(--line); background: #fff; color: var(--ink-soft);
+        padding: 4px 11px; font-size: 11.5px; border-radius: 6px; cursor: pointer;
+      }
+      .page-copy:active { background: var(--accent-soft); }
+
+      /* notepad-style editing: text cursor on hover once editable, dashed
+         outline only while actually focused/typing */
+      .page-body[contenteditable="true"] { cursor: text; }
+      .page-body[contenteditable="true"]:focus {
+        outline: 1.5px dashed var(--accent);
+        outline-offset: 6px;
+        border-radius: 4px;
+      }
+
+      .page-prompt {
+        font-size: 12.5px; color: var(--ink-soft); margin-bottom: 12px;
+        padding: 8px 10px; background: var(--page-area-bg); border-left: 3px solid var(--line);
+        border-radius: 4px; max-height: 46px; overflow: hidden;
+      }
+      .page-body {
+        white-space: normal; word-wrap: break-word;
+        font-size: var(--body-font-size, 15px); line-height: 1.55;
+        font-family: var(--sans); color: var(--ink);
+      }
+      /* rich reply: small paragraph gaps, real bullets, bold */
+      .page-body p { margin: 0 0 var(--para-gap); }
+      .page-body ul, .page-body ol { margin: 0 0 var(--para-gap); padding-left: 24px; }
+      .page-body li { margin: 0; padding-left: 2px; }
+      .page-body li::marker { color: var(--accent); }
+      .page-body strong { font-weight: 700; }
+      .page-body .h { font-weight: 700; margin: 2px 0 3px; }
+      .page-body code {
+        font: 13px ui-monospace, Consolas, Menlo, monospace;
+        background: var(--tint); padding: 1px 5px; border-radius: 4px;
+      }
+      .page-body pre {
+        margin: 2px 0 var(--para-gap); padding: 8px 11px; border-radius: 6px; background: var(--tint);
+        font: 12.5px/1.4 ui-monospace, Consolas, Menlo, monospace; white-space: pre-wrap;
+      }
+      .page-body pre:last-child, .page-body p:last-child,
+      .page-body ul:last-child, .page-body ol:last-child { margin-bottom: 0; }
+      .cursor {
+        display: inline-block; width: 2px; height: 17px; margin-left: 1px;
+        background: var(--live); vertical-align: -3px; animation: blink 1s steps(2) infinite;
+      }
+      @keyframes blink { 50% { opacity: 0; } }
+
+      /* ---- floating support button (bottom right) ---- */
+      .fab {
+        position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 50;
+        width: 48px; height: 48px; border-radius: 50%;
+        background: var(--live); color: #fff;
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 4px 10px rgba(63,165,100,.35), 0 1px 3px rgba(0,0,0,.15);
+        transition: transform .12s ease, background .12s ease;
+      }
+      .fab:hover, .fab:active { background: #339058; transform: translateY(-1px); }
+      .fab svg { width: 24px; height: 24px; }
+
+      /* ---- footer credit ---- */
+      .credit {
+        flex: none; text-align: center; padding: 8px 16px 10px;
+        border-top: 1px solid var(--line); background: var(--chrome-bg);
+        font-size: 11px; line-height: 1.5; color: var(--ink-soft);
+      }
+      .credit .links { margin-top: 2px; }
+      .credit a {
+        color: var(--accent); font-weight: 600; text-decoration: underline;
+        text-decoration-color: rgba(42, 74, 86, 0.45); text-underline-offset: 2px;
+      }
+      .credit a:hover { color: var(--accent-hover); text-decoration-color: currentColor; }
+    </style>
+  </head>
+  <body>
+    <div class="chrome">
+      <div class="titlebar">
+        <div class="titles">
+          <div class="doc-title">LIVE SESSION</div>
+          <div class="doc-status"><span class="dot" id="dot"></span><span id="statusText">Not connected</span></div>
+        </div>
+      </div>
+      <div class="toolbar">
+        <span class="peers" id="peers"></span>
+        <span class="spacer"></span>
+        <button class="icon-btn" id="clear">Clear</button>
+        <button class="icon-btn icon-only" id="settingsToggle" title="Settings" aria-label="Settings">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <button class="chrome-tab" id="chromeTab" title="Show/hide bar" aria-label="Show or hide top bar">
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2">
+        <path d="M6 9l6 6 6-6"/>
+      </svg>
+    </button>
+
+    <div id="pageArea">
+      <div class="empty" id="empty">
+        <b>Nothing here yet</b>
+        Tap the <b style="display:inline">settings icon</b> above and enter the code
+        you set in the browser extension.
+      </div>
+    </div>
+
+    <footer class="credit">
+      <div class="links">
+        <a href="https://www.linkedin.com/in/jayverma1/" target="_blank" rel="noopener noreferrer" title="Developer on LinkedIn">Developer on LinkedIn</a>
+      </div>
+    </footer>
+
+    <a class="fab" id="supportFab" href="https://wa.me/918269915033" target="_blank" rel="noopener noreferrer" title="Contact support on WhatsApp" aria-label="Contact support on WhatsApp">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M7 9C7 5.5 9.2 3 12 3C14.8 3 17 5.5 17 9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        <rect x="5.3" y="8.2" width="3" height="4.4" rx="1.5" fill="currentColor"/>
+        <rect x="15.7" y="8.2" width="3" height="4.4" rx="1.5" fill="currentColor"/>
+        <path d="M17.2 12.6V13.6C17.2 15 16 16.1 14.6 16.1H13.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        <circle cx="12.3" cy="16.1" r="1.3" fill="currentColor"/>
+        <path d="M3.5 21C3.9 17.3 7.4 14.5 12 14.5C16.6 14.5 20.1 17.3 20.5 21" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+      </svg>
+    </a>
+
+    <div class="modal-backdrop" id="modalBackdrop">
+      <div class="modal">
+        <h2>Settings</h2>
+
+        <div class="settings-section">
+          <label for="room">Pairing code</label>
+          <input id="room" type="text" maxlength="8" autocapitalize="characters"
+                 autocomplete="off" placeholder="JAY42" />
+          <div class="err" id="err"></div>
+        </div>
+
+        <div class="settings-section">
+          <label for="widthRange">Canvas size <span id="widthVal" class="settings-val">100%</span></label>
+          <input id="widthRange" type="range" min="40" max="100" step="1" value="100" />
+        </div>
+
+        <div class="settings-section">
+          <label for="fontRange">Text size <span id="fontVal" class="settings-val">15px</span></label>
+          <input id="fontRange" type="range" min="12" max="22" step="1" value="15" />
+        </div>
+
+        <div class="settings-section">
+          <label for="showCount">Recent replies to show</label>
+          <div class="stepper">
+            <button type="button" id="showMinus" class="stepper-btn">−</button>
+            <input id="showCount" type="number" min="1" max="50" step="1" value="3" />
+            <button type="button" id="showPlus" class="stepper-btn">+</button>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn-text" id="cancelCfg">Close</button>
+          <button class="btn-solid" id="connect">Connect</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
