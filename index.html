@@ -213,9 +213,13 @@
         font: 13px ui-monospace, Consolas, Menlo, monospace;
         background: var(--tint); padding: 1px 5px; border-radius: 4px;
       }
+      /* Code must not soft-wrap: pre-wrap re-flows long lines and makes
+         indentation unreadable on a phone. It scrolls sideways instead. */
       .page-body pre {
         margin: 2px 0 var(--para-gap); padding: 8px 11px; border-radius: 6px; background: var(--tint);
-        font: 12.5px/1.4 ui-monospace, Consolas, Menlo, monospace; white-space: pre-wrap;
+        font: 12.5px/1.45 ui-monospace, Consolas, Menlo, monospace;
+        white-space: pre; overflow-x: auto; tab-size: 4;
+        -webkit-overflow-scrolling: touch;
       }
       .page-body pre:last-child, .page-body p:last-child,
       .page-body ul:last-child, .page-body ol:last-child { margin-bottom: 0; }

@@ -183,12 +183,18 @@ function trimPages() {
 // Keep at most one blank line between paragraphs and drop trailing spaces.
 // \r\n / \r are normalised first, otherwise a Windows-side sender's line
 // breaks survive as stray characters and the whole reply reads as one block.
+// Trailing spaces are dropped ONLY outside ``` fences. This used to run over
+// the whole reply, stripping whitespace and collapsing blank lines inside code
+// blocks — both of which are part of the code. Fenced content is byte-exact.
 function tighten(t) {
-  return String(t || "")
-    .replace(/\r\n?/g, "\n")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  const lines = String(t || "").replace(/\r\n?/g, "\n").split("\n");
+  let inFence = false;
+  const out = [];
+  for (const line of lines) {
+    if (/^\s*```/.test(line)) { inFence = !inFence; out.push(line); continue; }
+    out.push(inFence ? line : line.replace(/[ \t]+$/, ""));
+  }
+  return out.join("\n").replace(/^\n+/, "").replace(/\s+$/, "");
 }
 
 // ---- light markdown: paragraphs, bullets, numbered lists, **bold**, `code` ----
@@ -220,7 +226,9 @@ function renderRich(container, text) {
   let pre = null;
   const closeText = () => { para = null; list = null; listType = null; };
 
-  for (const rawLine of text.replace(/\t/g, "  ").split("\n")) {
+  // No tab substitution: a tab inside a code block is part of the code, and
+  // CSS tab-size controls how wide it looks.
+  for (const rawLine of text.split("\n")) {
     if (/^\s*```/.test(rawLine)) {
       if (pre) { pre = null; } else {
         closeText();
